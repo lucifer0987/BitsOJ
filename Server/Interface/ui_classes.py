@@ -20,6 +20,12 @@ class ui_widgets:
 		delete_account_button.setFixedSize(200, 50)
 		delete_account_button.clicked.connect(lambda:self.delete_account(accounts_table.selectionModel().selectedRows()))
 		delete_account_button.setObjectName("topbar_button")
+		delete_account_button.setToolTip('Delete account.\nAlso perma-blocks the user if connected!\nProceed with caution.')
+
+		delete_all_accounts_button = QPushButton('Reset', self)
+		delete_all_accounts_button.setFixedSize(200, 50)
+		delete_all_accounts_button.clicked.connect(self.reset_accounts)
+		delete_all_accounts_button.setObjectName("topbar_button")
 
 		accounts_model = self.manage_models(self.db, 'accounts')
 		accounts_model.setHeaderData(0, Qt.Horizontal, 'Username')
@@ -31,6 +37,7 @@ class ui_widgets:
 		head_layout.addWidget(heading)
 		head_layout.addWidget(create_accounts_button)
 		head_layout.addWidget(delete_account_button)
+		head_layout.addWidget(delete_all_accounts_button)
 		head_layout.setStretch(0, 80)
 		head_layout.setStretch(1, 10)
 		head_layout.setStretch(2, 10)
@@ -118,6 +125,7 @@ class ui_widgets:
 		client_model.setHeaderData(0, Qt.Horizontal, 'Client ID')
 		client_model.setHeaderData(1, Qt.Horizontal, 'Username')
 		client_model.setHeaderData(2, Qt.Horizontal, 'Password')
+		client_model.setHeaderData(3, Qt.Horizontal, 'State')
 
 		client_view = self.generate_view(client_model)
 
@@ -186,7 +194,8 @@ class ui_widgets:
 		main_layout = QVBoxLayout()
 		main_layout.addWidget(head_widget)
 		main_layout.addWidget(query_view)
-		main_layout.addStretch(5)
+		main_layout.setStretch(0,5)
+		main_layout.setStretch(1,95)	
 		main = QWidget()
 		main.setLayout(main_layout)
 		main.setObjectName("main_screen");
@@ -244,25 +253,22 @@ class ui_widgets:
 		main.setObjectName("main_screen");
 		return main
 
-
-	def settings_ui(self):
-		heading = QLabel('Server Settings')
-		heading.setObjectName('main_screen_heading')
-
+	def contest_time_settings(self):
 		# Contest Time Management
 		## Contest Time Settings Label:
 		contest_time_label = QLabel('Contest Time Settings:')
 		contest_time_label.setObjectName('main_screen_sub_heading')
 
 		# Set contest time 
-		
 		contest_duration_label = QLabel('> Contest Duration: ')
 		contest_duration_label.setObjectName('main_screen_content')
 		contest_duration_label.setFixedSize(200, 20)
+
 		contest_time_entry = QLineEdit()
 		contest_time_entry.setText(self.config["Contest Duration"])
-		contest_time_entry.setPlaceholderText('HH:MM')
+		contest_time_entry.setPlaceholderText('HH:MM:SS')
 		contest_time_entry.setFixedSize(80, 30)
+		contest_time_entry.setToolTip('You will not be able to edit this when contest starts.')
 
 		contest_time_layout = QHBoxLayout()
 		contest_time_layout.addWidget(contest_duration_label)
@@ -282,6 +288,9 @@ class ui_widgets:
 		change_time_entry.setMinimum(-30)
 		change_time_entry.setMaximum(30)
 		change_time_entry.setValue(0)
+		change_time_entry.setReadOnly(True)
+		change_time_entry.setToolTip('You will be able to use it when contest is STARTED')
+
 
 		change_time_layout = QHBoxLayout()
 		change_time_layout.addWidget(contest_extension_label)
@@ -298,21 +307,28 @@ class ui_widgets:
 		set_button = QPushButton('Set')
 		set_button.setFixedSize(70, 25)
 		set_button.setObjectName('interior_button')
-		#set_button.clicked.connect(self.contest_settings)
+		set_button.setToolTip('Set contest time.\nThis does NOT broadcast to clients.')
+		set_button.clicked.connect(lambda: ui_widgets.preprocess_contest_broadcasts(self, 'SET', contest_time_entry.text()))
+
 		start_button = QPushButton('Start', self)
 		start_button.setFixedSize(70, 25)
 		start_button.setObjectName('interior_button')
-		start_button.clicked.connect(lambda: self.send_data_to_client_thread('START'))
+		start_button.setToolTip('START the contest and broadcast to all clients.')
+		start_button.clicked.connect(lambda: ui_widgets.preprocess_contest_broadcasts(self, 'START', contest_time_entry.text()))
 
 		update_button = QPushButton('Update', self)
+		update_button.setEnabled(False)
 		update_button.setFixedSize(70, 25)
 		update_button.setObjectName('interior_button')
-		update_button.clicked.connect(lambda: self.send_data_to_client_thread('UPDATE'))
+		update_button.setToolTip('UPDATE contest time and broadcast to all clients.\nDisabled until contest Starts')
+		update_button.clicked.connect(lambda: ui_widgets.preprocess_contest_broadcasts(self, 'UPDATE', change_time_entry.value()))
 
 		stop_button = QPushButton('Stop', self)
+		stop_button.setEnabled(False)
 		stop_button.setFixedSize(70, 25)
 		stop_button.setObjectName('interior_button')
-		stop_button.clicked.connect(lambda: self.send_data_to_client_thread('STOP'))
+		stop_button.setToolTip('STOP the contest and broadcast to all clients.\nDisabled until contest Starts')
+		stop_button.clicked.connect(lambda: ui_widgets.preprocess_contest_broadcasts(self, 'STOP'))
 		
 		
 		contest_buttons_layout = QHBoxLayout()
@@ -334,19 +350,182 @@ class ui_widgets:
 		time_management_widget = QWidget()
 		time_management_widget.setLayout(time_management_layout)
 		time_management_widget.setObjectName('content_box')
+		return time_management_widget, contest_time_entry, change_time_entry, set_button, start_button, update_button, stop_button
 
 
+	def contest_reset_settings(self):
+		contest_reset_label = QLabel('Reset Contest:')
+		contest_reset_label.setObjectName('main_screen_sub_heading')
+
+		# Reset contest labels and buttons
+		account_reset_label = QLabel('> Reset Accounts ')
+		account_reset_label.setObjectName('main_screen_content')
+		account_reset_label.setFixedSize(200, 25)
+		account_reset_button = QPushButton('RESET')
+		account_reset_button.setFixedSize(70, 25)
+		account_reset_button.setObjectName('interior_button')
+		account_reset_button.setToolTip('DELETE all accounts.\nConnected clients will NOT be disconnected.')
+		account_reset_button.clicked.connect(self.reset_accounts)
+		account_reset_layout = QHBoxLayout()
+		account_reset_layout.addWidget(account_reset_label)
+		account_reset_layout.addWidget(account_reset_button)
+		account_reset_layout.addStretch(1)
+		account_reset_widget = QWidget()
+		account_reset_widget.setLayout(account_reset_layout)
+
+
+		submission_reset_label = QLabel('> Reset Submissions ')
+		submission_reset_label.setObjectName('main_screen_content')
+		submission_reset_label.setFixedSize(200, 25)
+		submission_reset_button = QPushButton('RESET')
+		submission_reset_button.setFixedSize(70, 25)
+		submission_reset_button.setObjectName('interior_button')
+		submission_reset_button.setToolTip('DELETE all submissions.')
+		submission_reset_button.clicked.connect(self.reset_submissions)
+		submission_reset_layout = QHBoxLayout()
+		submission_reset_layout.addWidget(submission_reset_label)
+		submission_reset_layout.addWidget(submission_reset_button)
+		submission_reset_layout.addStretch(1)
+		submission_reset_widget = QWidget()
+		submission_reset_widget.setLayout(submission_reset_layout)
+
+		query_reset_label = QLabel('> Reset Queries ')
+		query_reset_label.setObjectName('main_screen_content')
+		query_reset_label.setFixedSize(200, 25)
+		query_reset_button = QPushButton('RESET')
+		query_reset_button.setFixedSize(70, 25)
+		query_reset_button.setObjectName('interior_button')
+		query_reset_button.setToolTip('DELETE all queries')
+		query_reset_button.clicked.connect(self.reset_queries)
+		query_reset_layout = QHBoxLayout()
+		query_reset_layout.addWidget(query_reset_label)
+		query_reset_layout.addWidget(query_reset_button)
+		query_reset_layout.addStretch(1)
+		query_reset_widget = QWidget()
+		query_reset_widget.setLayout(query_reset_layout)
+
+		client_reset_label = QLabel('> Disconnect Clients ')
+		client_reset_label.setObjectName('main_screen_content')
+		client_reset_label.setFixedSize(200, 25)
+		client_reset_button = QPushButton('RESET')
+		client_reset_button.setFixedSize(70, 25)
+		client_reset_button.setObjectName('interior_button')
+		client_reset_button.setToolTip('Disconnect all clients.')
+		# client_reset_button.clicked.connect()
+		client_reset_layout = QHBoxLayout()
+		client_reset_layout.addWidget(client_reset_label)
+		client_reset_layout.addWidget(client_reset_button)
+		client_reset_layout.addStretch(1)
+		client_reset_widget = QWidget()
+		client_reset_widget.setLayout(client_reset_layout)
+
+		judge_reset_label = QLabel('> Disconnect Judges ')
+		judge_reset_label.setObjectName('main_screen_content')
+		judge_reset_label.setFixedSize(200, 25)
+		judge_reset_button = QPushButton('RESET')
+		judge_reset_button.setFixedSize(70, 25)
+		judge_reset_button.setObjectName('interior_button')
+		judge_reset_button.setToolTip('Disconnect all judges.')
+		# judge_reset_button.clicked.connect()
+		judge_reset_layout = QHBoxLayout()
+		judge_reset_layout.addWidget(judge_reset_label)
+		judge_reset_layout.addWidget(judge_reset_button)
+		judge_reset_layout.addStretch(1)
+		judge_reset_widget = QWidget()
+		judge_reset_widget.setLayout(judge_reset_layout)
+
+		server_reset_label = QLabel('> Reset SERVER ')
+		server_reset_label.setObjectName('main_screen_content')
+		server_reset_label.setFixedSize(200, 25)
+		server_reset_button = QPushButton('CONFIRM')
+		server_reset_button.setEnabled(True)
+		server_reset_button.setFixedSize(70, 25)
+		server_reset_button.setObjectName('interior_button')
+		server_reset_button.setToolTip('Reset the Server.\nCan not be used in RUNNING state.')
+		server_reset_button.clicked.connect(self.reset_server)
+		server_reset_layout = QHBoxLayout()
+		server_reset_layout.addWidget(server_reset_label)
+		server_reset_layout.addWidget(server_reset_button)
+		server_reset_layout.addStretch(1)
+		server_reset_widget = QWidget()
+		server_reset_widget.setLayout(server_reset_layout)
+
+		button_layout = QGridLayout()
+		button_layout.addWidget(account_reset_widget, 0, 0)
+		button_layout.addWidget(submission_reset_widget, 0, 1)
+		button_layout.addWidget(client_reset_widget, 1, 0)
+		button_layout.addWidget(judge_reset_widget, 1, 1)
+		button_layout.addWidget(query_reset_widget, 2, 0)
+		button_layout.addWidget(server_reset_widget, 2, 1)
+		button_layout.setColumnStretch(0,1)
+		button_layout.setColumnStretch(1,3)
+
+		button_widget = QWidget()
+		button_widget.setLayout(button_layout)
+
+		contest_reset_layout = QVBoxLayout()
+		contest_reset_layout.addWidget(contest_reset_label)
+		contest_reset_layout.addWidget(button_widget)
+		contest_reset_widget = QWidget()
+		contest_reset_widget.setLayout(contest_reset_layout)
+		contest_reset_widget.setObjectName('content_box')
+		return contest_reset_widget, server_reset_button
+
+	def settings_ui(self):
+		heading = QLabel('Server Settings')
+		heading.setObjectName('main_screen_heading')
+		time_management_widget, contest_time_entry, change_time_entry, set_button, start_button, update_button, stop_button = ui_widgets.contest_time_settings(self)
+		contest_reset_widget, server_reset_button = ui_widgets.contest_reset_settings(self)
 
 		main_layout = QVBoxLayout()
 		main_layout.addWidget(heading)
 		main_layout.addWidget(time_management_widget)
+		main_layout.addWidget(contest_reset_widget)
 		main_layout.setSpacing(10)
 		main_layout.addStretch(1)
 		main = QWidget()
 		main.setLayout(main_layout)
 		main.setObjectName("main_screen");
-		return main
+		return main, contest_time_entry, change_time_entry, set_button, start_button, update_button, stop_button, server_reset_button
 
+	def preprocess_contest_broadcasts(self, signal, extra_data = 'NONE'):
+		#process_event() is defined in interface package
+		if signal == 'SET':
+			#Validate extra data to be time
+			if ui_widgets.validate_date(extra_data) == True:
+				self.process_event('SET', extra_data)
+			else:
+				return
+		elif signal == 'START':
+			#Validate extra data to be time
+			if ui_widgets.validate_date(extra_data) == True:
+				self.process_event('START', extra_data)	
+			else:
+				return
+			
+		elif signal == 'UPDATE':
+			self.process_event('UPDATE', extra_data)
+		elif signal == 'STOP':
+			self.process_event('STOP', extra_data)
+		return
+
+	def validate_date(data):
+		#Check that data is a valid date in HH:MM:SS format
+		try:
+			h, m, s = data.split(':')
+			if len(h) != 2 or len(m) != 2 or len(s) != 2:
+				print('[ ERROR ] Enter time in HH:MM:SS format only!')
+				return False
+			h = int(h)
+			m = int(m)
+			s = int(s)
+			if h < 0 or h > 24 or m < 0 or m > 59 or s < 0 or s > 59:
+				print('[ ERROR ] Enter time in HH:MM:SS format only!')
+				return False
+			return True
+		except:
+			print('[ ERROR ] Enter time in HH:MM:SS format only!')
+			return False
 
 	def reports_ui(self):
 		main_layout = QVBoxLayout()
@@ -388,7 +567,7 @@ class ui_widgets:
 
 
 class new_accounts_ui(QMainWindow):
-	pwd_type = 'Random'
+	pwd_type = 'Simple'
 	client_no = 0
 	judge_no = 0
 	data_changed_flags = ''
@@ -423,23 +602,19 @@ class new_accounts_ui(QMainWindow):
 		client_entry.setMaximum(500)
 		client_entry.valueChanged.connect(new_accounts_ui.client_updater)
 		
-		# client_entry.textEdited.connect(new_accounts_ui.client_updater)
-		# client_entry.setInputMask('9000')
-
 		label2 = QLabel('Judges')
 
 		judge_entry = QSpinBox()
 		judge_entry.setMinimum(0)
 		judge_entry.setMaximum(10)
 		judge_entry.valueChanged.connect(new_accounts_ui.judge_updater)
-		# judge_entry.textEdited.connect(new_accounts_ui.judge_updater)
-		# judge_entry.setInputMask('9000')
-
+	
 		label3 = QLabel('Password Type:')
 
 		password_type_entry = QComboBox()
+		#If you change these labels, also change lines 309, 311 in database_management.py
+		password_type_entry.addItem('Simple')
 		password_type_entry.addItem('Random')
-		password_type_entry.addItem('Easy')
 		password_type_entry.activated[str].connect(new_accounts_ui.combo_box_data_changed)
 
 		confirm_button = QPushButton('Confirm')

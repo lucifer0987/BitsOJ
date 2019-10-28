@@ -6,10 +6,16 @@
     "host": "localhost",
     "No_of_Problems": 5,
     "Problems": {
-        "Problem_1": "ABCD",
-        "Problem_2": "asdf",
-        "Problem_3": "rtyu",
-        "Problem_4": "tgbf",
-        "Problem_5": "yuio"
-    }
+        "Problem 1": "('Sachinam Srivastava','ABCD')",
+        "Problem 2": "('Prakhar Pandey','asdf')",
+        "Problem 3": "('Prashant Singh','rtyu')",
+        "Problem 4": "('Priyesh Rathore','tgbf')",
+        "Problem 5": "('Sanidhya Samadhiya','yuio')"
+    },
+    "Languages": "('C','C++','JAVA','PYTHON-2')",
+    "Contest": "START",
+    "Duration": "00:01:00",
+    "Start Time": "00:00:00",
+    "End Time": "00:00:00",
+    "Username": "team00001"
 }

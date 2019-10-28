@@ -6,8 +6,8 @@ from PyQt5.QtGui import QIcon, QPalette, QColor, QPixmap
 from PyQt5.QtSql import QSqlTableModel, QSqlDatabase
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QTimer, Qt, QModelIndex, qInstallMessageHandler
 from Interface.ui_classes import *
-from init_server import initialize_server
-from database_management import user_management
+from init_server import initialize_server, save_status
+from database_management import user_management, submissions_management, query_management
 
 
 # This is to ignore some warnings which were thrown when gui exited and 
@@ -36,6 +36,7 @@ class server_window(QMainWindow):
 		self.change_flag = True
 		self.timer.timeout.connect(self.update_data)
 		self.timer.start(1000)
+		self.contest_start_time = ''
 		
 		# make data_changed_flag accessible from the class methods
 		self.data_changed_flags = data_changed_flags2
@@ -45,6 +46,7 @@ class server_window(QMainWindow):
 		self.db = self.init_qt_database()
 		###########################################################
 		self.config = initialize_server.read_config()
+		self.contest_set_time = self.config['Contest Set Time']
 		# Define Sidebar Buttons and their actions
 		button_width = 200
 		button_height = 50
@@ -124,17 +126,21 @@ class server_window(QMainWindow):
 		self.tab6 = ui_widgets.problem_ui(self)
 		self.tab7 = ui_widgets.language_ui(self)
 		self.tab8 = ui_widgets.stats_ui(self)
-		self.tab9 = ui_widgets.settings_ui(self)
+		self.tab9, self.contest_time_entry, self.change_time_entry, self.set_button, self.start_button, self.update_button, self.stop_button, self.server_reset_button = ui_widgets.settings_ui(self)
 		self.tab10 = ui_widgets.reports_ui(self)
 		self.tab11 = ui_widgets.about_us_ui(self)
 		
 		###########################################################
 		
-		# Add widgets to our main window
+		
+		# Initialize GUI elements
 		server_window.init_UI(self)
+		# Load previous state in case of server restart
+		server_window.load_previous_state(self)
 		return
 	
 
+		return
 	def init_UI(self):
 		self.set_status('SETUP')
 		# Define Layout for sidebar
@@ -171,16 +177,19 @@ class server_window(QMainWindow):
 		logo_image2 = logo_image.scaledToWidth(104)
 		logo.setPixmap(logo_image2)
 
+		self.timer_widget = QLCDNumber()
+		self.timer_widget.setSegmentStyle(QLCDNumber.Flat)
+		self.timer_widget.setDigitCount(8)
+		self.timer_widget.display('00:00:00')
+		self.timer_widget.setFixedSize(150,40)
+		
+
 		top_bar_layout = QHBoxLayout()
 		top_bar_layout.setContentsMargins(15, 5, 20, 0);
 		top_bar_layout.addWidget(logo)
-		# top_bar_layout.addWidget(start_button)
-		# top_bar_layout.addWidget(pause_button)
-		# top_bar_layout.addWidget(stop_button)
+		top_bar_layout.addWidget(self.timer_widget)
 		top_bar_layout.setStretch(0, 70)
-		# top_bar_layout.setStretch(1, 10)
-		# top_bar_layout.setStretch(2, 10)
-		# top_bar_layout.setStretch(3, 10)
+		
 
 		top_bar_widget = QWidget()
 		top_bar_widget.setLayout(top_bar_layout)
@@ -290,6 +299,17 @@ class server_window(QMainWindow):
 
 	####################################################
 	# Functions related to GUI updates
+	def load_previous_state(self):
+		if self.config["Contest Status"] == "RUNNING":
+			server_window.set_button_behavior(self, 'RUNNING')
+		elif self.config["Contest Status"] == "STOPPED":
+			server_window.set_button_behavior(self, 'STOPPED')
+		elif self.config["Contest Status"] == "SETUP":
+			server_window.set_button_behavior(self, 'SETUP')
+
+		# TODO: When server restarts, pop up a new notification about contest status
+		return
+			
 	def update_data(self):
 		# If data has changed in submission table
 		if self.data_changed_flags[0] == 1:
@@ -304,30 +324,139 @@ class server_window(QMainWindow):
 		if self.data_changed_flags[9] == 1:
 			self.query_model.select()
 			self.set_flags(9, 0)
-		if self.data_changed_flags[10] == 1:
+
+		if self.data_changed_flags[7] == 1:
+			# System EXIT
+			sys.exit()
+
+		# OPTIMISE TODO
+		if self.data_changed_flags[10] == 0:
+			self.set_status('SETUP')
+			self.setWindowTitle('BitsOJ v1.0.1 [ SERVER ][ SETUP ]')
+
+		# Recieved contest start signal
+		elif self.data_changed_flags[10] == 1:
 			self.set_status('RUNNING')
 			self.setWindowTitle('BitsOJ v1.0.1 [ SERVER ][ RUNNING ]')
+			# Find time elapsed since contest start
+			total_time = self.contest_set_time
+			current_time = time.time()
+
+			elapsed_time = time.strftime('%H:%M:%S', time.gmtime(total_time - current_time ))
+			
+			#Update timer
+			self.timer_widget.display(elapsed_time)
+
+		# Recieved contest stop signal
 		elif self.data_changed_flags[10] == 2:
 			self.set_status('STOPPED')
 			self.setWindowTitle('BitsOJ v1.0.1 [ SERVER ][ STOPPED ]')
 		return
 
-	def send_data_to_client_thread(self, data, extra_data = '02:00'):
-		if data == 'START':
+	def convert_to_seconds(time_str):
+		print(time_str)
+		h, m, s = time_str.split(':')
+		return int(h) * 3600 + int(m) * 60 + int(s)
+
+	def set_button_behavior(self, status):
+		if status == "SETUP":
+			self.data_changed_flags[10] = 0
+			self.timer_widget.display('00:00:00')
+			self.contest_time_entry.setReadOnly(0)
+			self.contest_time_entry.setToolTip('You will not be able to edit this when contest starts.')
+			self.change_time_entry.setReadOnly(False)
+			self.change_time_entry.setToolTip('You will be able to use it when contest is STARTED')
+			self.set_button.setEnabled(True)
+			self.set_button.setToolTip('Set contest time.\nThis does NOT broadcast to clients.')
+			self.start_button.setEnabled(True)
+			self.start_button.setToolTip('START the contest and broadcast to all clients.')
+			self.stop_button.setEnabled(False)
+			self.stop_button.setToolTip('STOP the contest and broadcast to all clients.\nDisabled until contest Starts')
+			self.update_button.setEnabled(False)
+			self.update_button.setToolTip('UPDATE contest time and broadcast to all clients.\nDisabled until contest Starts')
+			self.server_reset_button.setEnabled(True)
+			self.server_reset_button.setToolTip('RESET the server.')
+		if status == "RUNNING":
 			self.data_changed_flags[10] = 1
+			self.contest_time_entry.setReadOnly(1)
+			self.contest_time_entry.setToolTip('Contest has STARTED.\nYou can\'t edit this value now.')
+			self.change_time_entry.setReadOnly(False)
+			self.change_time_entry.setToolTip('Extend/Shorten contest (in minutes)')
+			self.set_button.setEnabled(False)
+			self.set_button.setToolTip('Contest has STARTED.\nYou can not set time now!')
+			self.start_button.setEnabled(False)
+			self.start_button.setToolTip('Contest is already running!')
+			self.stop_button.setEnabled(True)
+			self.stop_button.setToolTip('STOP the contest.')
+			self.update_button.setEnabled(True)
+			self.update_button.setToolTip('Update the contest.')
+			self.server_reset_button.setEnabled(False)
+			self.server_reset_button.setToolTip('RESET the server.\nCan only be used when contest\nis not RUNNING.')
+		elif status == "STOPPED":
+			self.data_changed_flags[10] = 2
+			self.contest_time_entry.setReadOnly(1)
+			self.contest_time_entry.setToolTip('Contest has STOPPED.\nYou can\'t edit this value now.')
+			self.update_button.setEnabled(False)
+			self.update_button.setToolTip('Contest has STOPPED.\nYou can not extend it now.')
+			self.stop_button.setEnabled(False)
+			self.stop_button.setToolTip('Contest has already STOPPED!')
+			self.start_button.setEnabled(False)
+			self.start_button.setToolTip('Contest has STOPPED!')
+			self.set_button.setEnabled(False)
+			self.set_button.setToolTip('Contest has STOPPED!')
+			self.change_time_entry.setReadOnly(True)
+			self.change_time_entry.setToolTip('Contest has STOPPED.\nYou can not change time now!')
+			self.server_reset_button.setEnabled(True)
+			self.server_reset_button.setToolTip('RESET the server.')
+		return
+
+	def process_event(self, data, extra_data):
+		if data == 'SET':
+			print('\n[ SET ] Contest Duration : ' + str(extra_data))
+			save_status.update_entry('Contest Duration', str(extra_data))
+			self.timer_widget.display(initialize_server.get_duration())
+
+		elif data == 'START':
+			current_time = time.localtime()
+			self.contest_start_time = time.time()
+			self.contest_duration_seconds = server_window.convert_to_seconds(initialize_server.get_duration())
+			self.contest_set_time = self.contest_duration_seconds + self.contest_start_time
+
 			message = {
 			'Code' : 'START',
-			'Time' : extra_data
+			'Duration' : extra_data
 			}
 			message = json.dumps(message)
 			self.data_to_client.put(message)
+
+			# Update GUI
+			server_window.set_button_behavior(self, 'RUNNING')
+
+			# Update config file
+			current_time = str(time.strftime("%H:%M:%S", current_time))
+			save_status.update_entry('Contest Start Time', current_time)
+			save_status.update_entry('Contest Status', 'RUNNING')
+			save_status.update_entry('Contest Duration', extra_data)
+			save_status.update_entry('Contest Set Time', self.contest_set_time)
+
 		elif data == 'STOP':
-			self.data_changed_flags[10] = 2
+			current_time = time.localtime()
+			
 			message = {
 			'Code' : 'STOP'
 			}
 			message = json.dumps(message)
 			self.data_to_client.put(message)
+
+			# Update GUI
+			self.set_button_behavior('STOPPED')
+			# Update config file
+			current_time = str(time.strftime("%H:%M:%S", current_time))
+			save_status.update_entry('Contest End Time', current_time)
+			save_status.update_entry('Contest Status', 'STOPPED')
+
+			
+
 		elif data == 'UPDATE':
 			# Send UPDATE signal
 			message = {
@@ -336,9 +465,6 @@ class server_window(QMainWindow):
 			}
 			message = json.dumps(message)
 			self.data_to_client.put(message)
-		elif data == 'QUERY RESPONSE':
-			#process extra data (dictionary or maybe json)
-			self.data_to_client.put('QUERY')
 			
 		return
 
@@ -490,9 +616,19 @@ class server_window(QMainWindow):
 		custom_close_box.exec_()
 
 		if custom_close_box.clickedButton() == button_yes:
+			# Delete from accounts table and connected clients table
 			user_management.delete_user(username)
-			# Update Accounts View
+			# Broadcast this user disconnection
+			message = {
+			'Code' : 'DSCNT',
+			'Mode' : 1,
+			'Client' : username
+			}
+			message = json.dumps(message)
+			self.data_to_client.put(message)
+			# Update Accounts and connected clients View
 			self.data_changed_flags[5] = 1
+			self.data_changed_flags[1] = 1
 		elif custom_close_box.clickedButton() == button_no : 
 			pass
 
@@ -501,11 +637,226 @@ class server_window(QMainWindow):
 
 		return
 
+	def reset_accounts(self):
+		if self.data_changed_flags[11] == 0:
+			# Set critical flag
+			self.data_changed_flags[11] = 1
+		else:
+			# If one data deletion window is already opened, process it first.
+			return
+		# If no row is selected, return
+		try:
+			message = "Are you sure you want to DELETE ALL accounts?"
+		
+			custom_close_box = QMessageBox()
+			custom_close_box.setIcon(QMessageBox.Critical)
+			custom_close_box.setWindowTitle('Confirm RESET')
+			custom_close_box.setText(message)
+
+			custom_close_box.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+			custom_close_box.setDefaultButton(QMessageBox.No)
+
+			button_yes = custom_close_box.button(QMessageBox.Yes)
+			button_yes.setText('Yes')
+			button_no = custom_close_box.button(QMessageBox.No)
+			button_no.setText('No')
+
+			button_yes.setObjectName("close_button_yes")
+			button_no.setObjectName("close_button_no")
+
+			button_yes.setStyleSheet(open('Elements/style.qss', "r").read())
+			button_no.setStyleSheet(open('Elements/style.qss', "r").read())
+
+			custom_close_box.exec_()
+
+			if custom_close_box.clickedButton() == button_yes:
+				user_management.delete_all()
+				# Update Accounts View
+				self.data_changed_flags[5] = 1
+			elif custom_close_box.clickedButton() == button_no : 
+				pass
+		except:
+			print('Could not reset database!')
+
+		finally:
+			# Reset critical flag
+			self.data_changed_flags[11] = 0
+			return
+
+	
+	def reset_submissions(self):
+		if self.data_changed_flags[11] == 0:
+			# Set critical flag
+			self.data_changed_flags[11] = 1
+		else:
+			# If one data deletion window is already opened, process it first.
+			return
+		# If no row is selected, return
+		try:
+			message = "Are you sure you want to DELETE ALL submissions?"
+		
+			custom_close_box = QMessageBox()
+			custom_close_box.setIcon(QMessageBox.Critical)
+			custom_close_box.setWindowTitle('Confirm RESET')
+			custom_close_box.setText(message)
+
+			custom_close_box.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+			custom_close_box.setDefaultButton(QMessageBox.No)
+
+			button_yes = custom_close_box.button(QMessageBox.Yes)
+			button_yes.setText('Yes')
+			button_no = custom_close_box.button(QMessageBox.No)
+			button_no.setText('No')
+
+			button_yes.setObjectName("close_button_yes")
+			button_no.setObjectName("close_button_no")
+
+			button_yes.setStyleSheet(open('Elements/style.qss', "r").read())
+			button_no.setStyleSheet(open('Elements/style.qss', "r").read())
+
+			custom_close_box.exec_()
+
+			if custom_close_box.clickedButton() == button_yes:
+				submissions_management.delete_all()
+				# Update Submissions View
+				self.data_changed_flags[0] = 1
+			elif custom_close_box.clickedButton() == button_no : 
+				pass
+		except Exception as error:
+			print('Could not reset database : ' + str(error))
+
+		finally:
+			# Reset critical flag
+			self.data_changed_flags[11] = 0
+		return
+
+	def reset_queries(self):
+		if self.data_changed_flags[11] == 0:
+			# Set critical flag
+			self.data_changed_flags[11] = 1
+		else:
+			# If one data deletion window is already opened, process it first.
+			return
+		# If no row is selected, return
+		try:
+			message = "Are you sure you want to DELETE ALL queries?"
+		
+			custom_close_box = QMessageBox()
+			custom_close_box.setIcon(QMessageBox.Critical)
+			custom_close_box.setWindowTitle('Confirm RESET')
+			custom_close_box.setText(message)
+
+			custom_close_box.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+			custom_close_box.setDefaultButton(QMessageBox.No)
+
+			button_yes = custom_close_box.button(QMessageBox.Yes)
+			button_yes.setText('Yes')
+			button_no = custom_close_box.button(QMessageBox.No)
+			button_no.setText('No')
+
+			button_yes.setObjectName("close_button_yes")
+			button_no.setObjectName("close_button_no")
+
+			button_yes.setStyleSheet(open('Elements/style.qss', "r").read())
+			button_no.setStyleSheet(open('Elements/style.qss', "r").read())
+
+			custom_close_box.exec_()
+
+			if custom_close_box.clickedButton() == button_yes:
+				query_management.delete_all()
+				# Update Queriess View
+				self.data_changed_flags[9] = 1
+			elif custom_close_box.clickedButton() == button_no : 
+				pass
+		except Exception as error:
+			print('Could not reset database : ' + str(error))
+
+		finally:
+			# Reset critical flag
+			self.data_changed_flags[11] = 0
+		return
+
+	def reset_server(self):
+		if self.data_changed_flags[11] == 0:
+			# Set critical flag
+			self.data_changed_flags[11] = 1
+		else:
+			# If one data deletion window is already opened, process it first.
+			return
+		# If no row is selected, return
+		try:
+			message = "Are you sure to RESET the server?\nContest Information will be lost"
+			extra_data = "You should create the contest report first!"
+		
+			custom_close_box = QMessageBox()
+			custom_close_box.setIcon(QMessageBox.Critical)
+			custom_close_box.setWindowTitle('SERVER RESET')
+			custom_close_box.setText(message)
+
+			custom_close_box.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+			custom_close_box.setDefaultButton(QMessageBox.No)
+
+			button_yes = custom_close_box.button(QMessageBox.Yes)
+			button_yes.setText('Yes')
+			button_no = custom_close_box.button(QMessageBox.No)
+			button_no.setText('No')
+
+			button_yes.setObjectName("close_button_yes")
+			button_no.setObjectName("close_button_no")
+
+			button_yes.setStyleSheet(open('Elements/style.qss', "r").read())
+			button_no.setStyleSheet(open('Elements/style.qss', "r").read())
+
+			custom_close_box.exec_()
+
+			if custom_close_box.clickedButton() == button_yes:
+				print('[ EVENT ] SERVER RESET TRIGGERED')
+				print('[ RESET ] Disconnecting all clients...')
+				self.data_changed_flags[1] = 1
+				# TODO : Broadcast this to all clients...
+
+
+
+
+				
+				print('[ RESET ] Disconnecting all Judges...')
+				print('[ RESET ] Resetting Accounts...')
+				user_management.delete_all()
+				# Update Accounts View
+				self.data_changed_flags[5] = 1
+				print('[ RESET ] Resetting Submissions...')
+				submissions_management.delete_all()
+				# Update Submissions View
+				self.data_changed_flags[0] = 1
+				print('[ RESET ] Resetting Queries...')
+				query_management.delete_all()
+				# Update Queriess View
+				self.data_changed_flags[9] = 1
+				print('[ RESET ] Reset environment...')
+				server_window.set_button_behavior(self, 'SETUP')
+				save_status.update_entry('Contest Duration', '00:00:00')
+				save_status.update_entry('Contest Status', 'SETUP')
+				save_status.update_entry('Contest Start Time', '00:00:00')
+				save_status.update_entry('Contest End Time', '00:00:00')
+				save_status.update_entry('Contest Set Time', 0)
+
+			
+			elif custom_close_box.clickedButton() == button_no : 
+				pass
+		except Exception as error:
+			print('Could not reset database : ' + str(error))
+
+		finally:
+			# Reset critical flag
+			self.data_changed_flags[11] = 0
+		return
+
+		
+
 	###################################################
 	
 	###################################################
-
-	def set_status(self, message = 'STOPPED'):
+	def set_status(self, message = 'SETUP'):
 		self.status.showMessage('BitsOJ > ' + message)
 	###################################################
 

@@ -17,24 +17,26 @@ def main():
 	# Initialize server
 	print('[ SETUP ] Initialising server...')
 
-	# save_status.write_config(
-	# 	'BitsOJ', 
-	# 	'root', 
-	# 	'judge1', 
-	# 	'judge1', 
-	# 	'localhost', 
-	# 	'True', 
-	# 	'True', 
-	# 	'abcdefghij12345', 
-	# 	'abcdefghij12345', 
-	# 	'papa', 
-	# 	'02:00'
-	# 	)
+# save_status.write_config(
+# 		'BitsOJ', 
+# 		'root', 
+# 		'judge1', 
+# 		'judge1', 
+# 		'localhost', 
+# 		'True', 
+# 		'True', 
+# 		'abcdefghij12345', 
+# 		'abcdefghij12345', 
+# 		'papa', 
+# 		'02:00',
+# 		'SETUP',
+# 		'00:00:00',
+# 		'00:00:00',
+#		'0'
+# 		)
+
 
 	config = initialize_server.read_config()
-
-	superuser_username = config["Server Username"]
-	superuser_password = config["Server Password"]
 	judge_username = config["Judge Username"]
 	judge_password = config["Judge Password"]
 	host = config["Server IP"]
@@ -81,11 +83,12 @@ def main():
 	data_changed_flags[4] = 0
 	# SYSTEM SHUT flag
 	data_changed_flags[7] = 0
+	data_changed_flags[10] = -1
 	##################################
 
 	# Manage Threads
 	print('[ SETUP ] Initialising subprocesses...')
-	client_pid, judge_pid = manage_process(superuser_username, superuser_password, judge_username, judge_password, host, data_changed_flags, data_from_interface)
+	client_pid, judge_pid = manage_process(judge_username, judge_password, host, data_changed_flags, data_from_interface)
 
 	# Initialize GUI handler
 	print('[ SETUP ] Initialising GUI....')
@@ -124,8 +127,8 @@ def main():
 	print("  ################################################")
 
 
-def manage_process(superuser_username, superuser_password, judge_username, judge_password, host, data_changed_flags, data_from_interface):
-	client_handler_process = multiprocessing.Process(target = manage_clients.prepare, args = (superuser_username, superuser_password, host, data_changed_flags, data_from_interface, ))
+def manage_process(judge_username, judge_password, host, data_changed_flags, data_from_interface):
+	client_handler_process = multiprocessing.Process(target = manage_clients.prepare, args = (data_changed_flags, data_from_interface, ))
 	judge_handler_process = multiprocessing.Process(target = manage_judges.listen_judges, args = (judge_username, judge_password, host, data_changed_flags, ))
 
 	client_handler_process.start()

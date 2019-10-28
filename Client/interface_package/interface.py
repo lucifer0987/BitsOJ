@@ -1,11 +1,13 @@
 import sys
 import time
+import json
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIcon, QPalette, QColor, QPixmap
 from PyQt5.QtSql import QSqlTableModel, QSqlDatabase
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QTimer, Qt, QModelIndex, qInstallMessageHandler
 from interface_package.ui_classes import *
 from decrypt_problem import decrypt
+from init_client import initialize_contest
 
 
 global current_status 
@@ -19,6 +21,7 @@ global Timer
 def handler(msg_type, msg_log_context, msg_string):
 	pass
 qInstallMessageHandler(handler)
+
 
 
 class client_window(QMainWindow):
@@ -129,9 +132,17 @@ class client_window(QMainWindow):
 		logo_image = logo_image.scaledToWidth(104)
 		logo.setPixmap(logo_image)
 
+		self.timer_widget = QLCDNumber()
+		self.timer_widget.setSegmentStyle(QLCDNumber.Flat)
+		self.timer_widget.setDigitCount(8)
+		self.timer_widget.display('00:00:00')
+		self.timer_widget.setFixedSize(150,40)
+
 		top_bar_layout = QHBoxLayout()
-		top_bar_layout.setContentsMargins(15, 5, 1, 0);
+		top_bar_layout.setContentsMargins(15, 5, 1, 0)
 		top_bar_layout.addWidget(logo)
+		top_bar_layout.addWidget(self.timer_widget)
+		top_bar_layout.setStretch(0, 70)
 
 		top_bar_widget = QWidget()
 		top_bar_widget.setLayout(top_bar_layout)
@@ -208,10 +219,18 @@ class client_window(QMainWindow):
 
 	def update_data(self):
 		if self.data_changed_flag[0] == 1:
+			self.setWindowTitle('BitsOJ v1.0.1 [ CLIENT ][ RUNNING ]')
 			self.start_contest()
 			self.set_status()
 			self.data_changed_flag[0] = 2
 		# If data has changed in submission table
+
+		if self.data_changed_flag[0] == 3:
+			self.setWindowTitle('BitsOJ v1.0.1 [ CLIENT ][ STOPPED ]')
+			self.stop_contest()
+			self.set_status()
+			self.data_changed_flag[0] = 4
+
 		if self.data_changed_flag[1] ==1:
 			self.sub_model.select()
 			# self.notify()
@@ -240,6 +259,26 @@ class client_window(QMainWindow):
 		if(self.data_changed_flag[3] == 1):
 			QMessageBox.warning(self, 'Error', 'Right Now Admin is not accepting Submission.\nContact Administrator')
 			self.data_changed_flag[3] = 0
+
+		if(self.data_changed_flag[4] == 2):
+			try:
+				initialize_contest.contest_end_time()
+				self.data_changed_flag[4] = 1
+			except Exception as Error:
+				print(str(Error))
+
+		if(self.data_changed_flag[4] == 1):
+			try:
+				total_time = initialize_contest.return_contest_end_time()
+				current_time = time.time()
+				elapsed_time = time.strftime('%H:%M:%S', time.gmtime(total_time - current_time ))
+				self.timer_widget.display(elapsed_time)
+				self.set_status()
+				if elapsed_time == '00:00:00':
+					self.data_changed_flag[4] = 0
+					self.data_changed_flag[0] = 3
+			except Exception as Error:
+				print(str(Error))
 		return
 
 	####################################################################################
@@ -376,12 +415,17 @@ class client_window(QMainWindow):
 		decrypt.decrypting()
 		QMessageBox.warning(self, 'Info', 'Contest has been STARTED.\nNow you can view problems.')
 
+	def stop_contest(self):
+		global current_status
+		current_status = 'STOPPED'
+		QMessageBox.warning(self, 'Message', 'Contest has been ended.\n You can not submit solution any more ')
+
 
 	def notify(self):
 		if self.data_changed_flag[1] == 2:
 			QMessageBox.warning(self, 'Message', 'Submission verdict received ')
 		if self.data_changed_flag[2] == 2:
-			QMessageBox.warning(self, 'Message', 'Query Response received ')
+			QMessageBox.warning(self, 'Message', 'Query Response received ')		
 
 
 class init_gui(client_window):
@@ -395,14 +439,6 @@ class init_gui(client_window):
 		# make a reference of App class
 		client_app = client_window(data_changed_flag)
 
-		# app_1 = QApplication([])
-		# screen_resolution = app_1.desktop().screenGeometry()
-		# width, height = screen_resolution.width(), screen_resolution.height()
-		# print(width)
-		# print(height)
-		# server_app.setFixedSize(width, height)
-
-		# server_app.showFullScreen()
 		client_app.showMaximized()
 		# server_app.showNormal()
 		# Close the server as soon as close buton is clicked
