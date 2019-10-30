@@ -117,16 +117,16 @@ class server_window(QMainWindow):
 		# Manage tabs on the right window
 		# Each tab is an object returned by the respective function associated with its UI
 		# Tab UI are managed by interface_packages/ui_classes.py file 
-		self.tab0, self.account_model = ui_widgets.accounts_ui(self)
+		self.tab0, self.account_model, self.delete_account_button = ui_widgets.accounts_ui(self)
 		self.tab1, self.sub_model = ui_widgets.submissions_ui(self)
-		self.tab2 = ui_widgets.judge_ui(self)
+		self.tab2, self.judge_model = ui_widgets.judge_ui(self)
 		self.tab3, self.client_model = ui_widgets.client_ui(self)
 		self.tab4, self.query_model = ui_widgets.query_ui(self)
 		self.tab5 = ui_widgets.leaderboard_ui(self)
 		self.tab6 = ui_widgets.problem_ui(self)
 		self.tab7 = ui_widgets.language_ui(self)
 		self.tab8 = ui_widgets.stats_ui(self)
-		self.tab9, self.contest_time_entry, self.change_time_entry, self.set_button, self.start_button, self.update_button, self.stop_button, self.server_reset_button = ui_widgets.settings_ui(self)
+		self.tab9, self.contest_time_entry, self.change_time_entry, self.set_button, self.start_button, self.update_button, self.stop_button, self.account_reset_button, self.submission_reset_button, self.query_reset_button, self.client_reset_button, self.server_reset_button = ui_widgets.settings_ui(self)
 		self.tab10 = ui_widgets.reports_ui(self)
 		self.tab11 = ui_widgets.about_us_ui(self)
 		
@@ -217,7 +217,7 @@ class server_window(QMainWindow):
 		
 
 		# Screen 1 will be our initial screen 
-		self.right_widget.setCurrentIndex(9)
+		self.right_widget.setCurrentIndex(0)
 
 		# Define the combined layout for sidebar + right side screens
 		main_layout = QHBoxLayout()
@@ -325,6 +325,10 @@ class server_window(QMainWindow):
 			self.query_model.select()
 			self.set_flags(9, 0)
 
+		if self.data_changed_flags[13] == 1:
+			self.judge_model.select()
+			self.set_flags(13, 0)
+
 		if self.data_changed_flags[7] == 1:
 			# System EXIT
 			sys.exit()
@@ -361,7 +365,8 @@ class server_window(QMainWindow):
 	def set_button_behavior(self, status):
 		if status == "SETUP":
 			self.data_changed_flags[10] = 0
-			self.timer_widget.display('00:00:00')
+			contest_duration = self.config["Contest Duration"]
+			self.timer_widget.display(contest_duration)
 			self.contest_time_entry.setReadOnly(0)
 			self.contest_time_entry.setToolTip('You will not be able to edit this when contest starts.')
 			self.change_time_entry.setReadOnly(False)
@@ -376,6 +381,11 @@ class server_window(QMainWindow):
 			self.update_button.setToolTip('UPDATE contest time and broadcast to all clients.\nDisabled until contest Starts')
 			self.server_reset_button.setEnabled(True)
 			self.server_reset_button.setToolTip('RESET the server.')
+			self.account_reset_button.setEnabled(True)
+			self.submission_reset_button.setEnabled(True)
+			self.query_reset_button.setEnabled(True)
+			self.client_reset_button.setEnabled(True)
+			self.delete_account_button.setEnabled(True)
 		if status == "RUNNING":
 			self.data_changed_flags[10] = 1
 			self.contest_time_entry.setReadOnly(1)
@@ -392,6 +402,11 @@ class server_window(QMainWindow):
 			self.update_button.setToolTip('Update the contest.')
 			self.server_reset_button.setEnabled(False)
 			self.server_reset_button.setToolTip('RESET the server.\nCan only be used when contest\nis not RUNNING.')
+			self.account_reset_button.setEnabled(False)
+			self.submission_reset_button.setEnabled(False)
+			self.query_reset_button.setEnabled(True)
+			self.client_reset_button.setEnabled(True)
+			self.delete_account_button.setEnabled(False)
 		elif status == "STOPPED":
 			self.data_changed_flags[10] = 2
 			self.contest_time_entry.setReadOnly(1)
@@ -408,6 +423,11 @@ class server_window(QMainWindow):
 			self.change_time_entry.setToolTip('Contest has STOPPED.\nYou can not change time now!')
 			self.server_reset_button.setEnabled(True)
 			self.server_reset_button.setToolTip('RESET the server.')
+			self.account_reset_button.setEnabled(True)
+			self.submission_reset_button.setEnabled(True)
+			self.query_reset_button.setEnabled(True)
+			self.client_reset_button.setEnabled(True)
+			self.delete_account_button.setEnabled(True)
 		return
 
 	def process_event(self, data, extra_data):
@@ -477,6 +497,15 @@ class server_window(QMainWindow):
 			self.set_flags(2, 0)
 		return
 
+	def allow_judge_login_handler(self, state):
+		if(state == Qt.Checked):
+			# Allow logins
+			self.set_flags(12, 1)
+		else:
+			# Stop logins
+			self.set_flags(12, 0)
+		return
+
 	def allow_submissions_handler(self, state):
 		if(state == Qt.Checked):
 			# Allow submissions
@@ -488,6 +517,11 @@ class server_window(QMainWindow):
 
 	def check_login_allowed(self):
 		if self.data_changed_flags[2] == 1:
+			return True
+		return False
+
+	def check_judge_login_allowed(self):
+		if self.data_changed_flags[12] == 1:
 			return True
 		return False
 
@@ -566,16 +600,23 @@ class server_window(QMainWindow):
 				query = self.query_model.index(selected_row, 2).data()
 				client_id = self.query_model.index(selected_row, 1).data()
 				query_id = self.query_model.index(selected_row, 0).data()
+				
+				if client_id == None and query_id == None:
+					pass
+				else:
+					self.window = query_reply_ui(self.data_changed_flags,self.data_to_client ,query,client_id, query_id)
+					self.window.show()
+
 			except Exception as error: 
 				# Reset data_changed_flag for deletion of account
 				print('[ ERROR ] : ' + str(error))
+			finally:
 				self.data_changed_flags[8] = 0
 				return
-			self.window = query_reply_ui(self.data_changed_flags,self.data_to_client ,query,client_id, query_id)
-			self.window.show()			
 		else:
-			pass
-		return
+			return
+
+		
 
 	@pyqtSlot()
 	def delete_account(self, selected_rows):
@@ -636,6 +677,34 @@ class server_window(QMainWindow):
 		self.data_changed_flags[6] = 0
 
 		return
+
+	@pyqtSlot()
+	def edit_client(self, selected_row):
+		if self.data_changed_flags[14] == 0:
+			# Set critical flag
+			self.data_changed_flags[14] = 1
+		else:
+			# If one client edit window is already opened, process it first.
+			return
+		# If no row is selected, return
+		try:
+			client_id = self.client_model.index(selected_row, 0).data()
+			username = self.client_model.index(selected_row, 1).data()
+			password = self.client_model.index(selected_row, 2).data()
+			state = self.client_model.index(selected_row, 3).data()
+
+			if username == None or client_id == None or password == None or state == None:
+				pass
+			else:
+				self.edit_window = account_edit_ui(self.data_changed_flags, client_id, username, password, state)
+				self.edit_window.show()
+			
+		except Exception as error: 
+			print('Error' + str(error))
+		finally:
+			# Reset critical flag
+			self.data_changed_flags[14] = 0
+			return
 
 	def reset_accounts(self):
 		if self.data_changed_flags[11] == 0:
@@ -812,14 +881,22 @@ class server_window(QMainWindow):
 			if custom_close_box.clickedButton() == button_yes:
 				print('[ EVENT ] SERVER RESET TRIGGERED')
 				print('[ RESET ] Disconnecting all clients...')
-				self.data_changed_flags[1] = 1
 				# TODO : Broadcast this to all clients...
+				message = {
+				'Code' : 'DSCNT',
+				'Mode' : 2
+				}
+				message = json.dumps(message)
+				self.data_to_client.put(message)
+				# Set DISCONNECTED to all connected clients
+				user_management.disconnect_all()
+				self.data_changed_flags[1] = 1
 
-
-
-
-				
 				print('[ RESET ] Disconnecting all Judges...')
+				# Update judges view
+				self.data_changed_flags[13] = 1
+				# TODO Broadcast this to all judges
+
 				print('[ RESET ] Resetting Accounts...')
 				user_management.delete_all()
 				# Update Accounts View
@@ -850,6 +927,63 @@ class server_window(QMainWindow):
 			# Reset critical flag
 			self.data_changed_flags[11] = 0
 		return
+
+	def disconnect_all(self):
+		if self.data_changed_flags[11] == 0:
+			# Set critical flag
+			self.data_changed_flags[11] = 1
+		else:
+			# If one data deletion window is already opened, process it first.
+			return
+		# If no row is selected, return
+		try:
+			message = "Are you sure to DISCONNECT all clients?\nClients will be able to login again\nif permitted."
+			
+			custom_close_box = QMessageBox()
+			custom_close_box.setIcon(QMessageBox.Critical)
+			custom_close_box.setWindowTitle('Disconnect Clients')
+			custom_close_box.setText(message)
+
+			custom_close_box.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+			custom_close_box.setDefaultButton(QMessageBox.No)
+
+			button_yes = custom_close_box.button(QMessageBox.Yes)
+			button_yes.setText('Yes')
+			button_no = custom_close_box.button(QMessageBox.No)
+			button_no.setText('No')
+
+			button_yes.setObjectName("close_button_yes")
+			button_no.setObjectName("close_button_no")
+
+			button_yes.setStyleSheet(open('Elements/style.qss', "r").read())
+			button_no.setStyleSheet(open('Elements/style.qss', "r").read())
+
+			custom_close_box.exec_()
+
+			if custom_close_box.clickedButton() == button_yes:
+				print('[ EVENT ] CLIENT DISCONNECT TRIGGERED')
+				print('[ EVENT ][ RESET ] Disconnecting all clients...')
+				# TODO : Broadcast this to all clients...
+				message = {
+				'Code' : 'DSCNT',
+				'Mode' : 2
+				}
+				message = json.dumps(message)
+				self.data_to_client.put(message)
+				# Set DISCONNECTED to all connected clients
+				user_management.disconnect_all()
+				self.data_changed_flags[1] = 1
+			
+			elif custom_close_box.clickedButton() == button_no : 
+				pass
+		except Exception as error:
+			print('Could not reset database : ' + str(error))
+
+		finally:
+			# Reset critical flag
+			self.data_changed_flags[11] = 0
+		return
+
 
 		
 
