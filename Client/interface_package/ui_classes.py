@@ -11,10 +11,7 @@ from manage_code import send_code
 from database_management import submission_management, query_management, manage_local_ids
 from init_client import handle_config
 
-with open("config.json", "r") as read_config:
-	config = json.load(read_config)
-
-
+config = handle_config.read_config_json()
 
 
 class ui_widgets():
@@ -44,7 +41,8 @@ class ui_widgets():
 		# problems_layout.setSpacing(20)
 		while(number_of_buttons <= config["No_of_Problems"]):
 		# for i in range(config["No_of_Problems"]):
-			problem_name = eval(config["Problems"]['Problem ' + str(number_of_buttons)])
+			# problem_name = eval(config["Problems"]['Problem ' + str(number_of_buttons)])
+			problem_name = config["Problems"]['Problem ' + str(number_of_buttons)]
 			problem_name = problem_name[0]
 			ui_widgets.var['Problem {}'.format(number_of_buttons)] = QPushButton('Problem '+str(number_of_buttons) + '\n' + problem_name,self)
 			ui_widgets.var['Problem {}'.format(number_of_buttons)].setObjectName('problem_buttons')
@@ -311,9 +309,7 @@ class ui_widgets():
 					textbox_value,
 					extention
 					)
-				print("no")
 				data_changed_flag[1] = 1
-				print('sachinam')
 				send_code.solution_request(
 					problem_code,
 					selected_language,
