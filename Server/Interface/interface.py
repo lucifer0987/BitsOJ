@@ -179,7 +179,7 @@ class server_window(QMainWindow):
 
 		#Define our top bar
 		logo = QLabel(self)
-		logo_image = QPixmap('Interface/bitwise_header.png')
+		logo_image = QPixmap('Elements/bitwise_header.png')
 		logo_image2 = logo_image.scaledToWidth(104)
 		logo.setPixmap(logo_image2)
 
@@ -608,7 +608,6 @@ class server_window(QMainWindow):
 		horizontal_header = table.horizontalHeader()
 		horizontal_header.setSectionResizeMode(QHeaderView.Stretch)
 		vertical_header = table.verticalHeader()
-		#vertical_header.setSectionResizeMode(QHeaderView.Stretch)
 		vertical_header.setVisible(False)
 		return table
 
@@ -648,6 +647,28 @@ class server_window(QMainWindow):
 		else:
 			return
 
+	@pyqtSlot()
+	def manage_io_file(self, problem_code, row, column):
+		if column == 0:
+			# Input file is selected
+			file_path = "Problem Data/" + problem_code +"/input" + str(row) + ".in"
+			self.ui = view_case_ui(
+				self.data_changed_flags,
+				file_path
+			)
+			self.ui.show()
+		elif column == 1:
+			# Output file is selected
+			file_path = "Problem Data/" + problem_code +"/output" + str(row) + ".ans"
+			self.ui = view_case_ui(
+				self.data_changed_flags,
+				file_path
+			)
+			self.ui.show()
+	
+		elif column == 2:
+			print("Disable File " + str(row) + " for problem " + problem_code)
+		return
 		
 
 	@pyqtSlot()
