@@ -4,7 +4,6 @@ import os
 import signal
 import sys
 import json
-
 from time import sleep
 from connection import manage_connection
 from database_management import manage_database, manage_local_ids
