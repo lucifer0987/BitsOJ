@@ -55,7 +55,6 @@ Visit : http://localhost:15672/ and login using user_name and user_password
 3.~Socket Programming~  
 4.Pika + RabbitMQ  
 5.PyQt Module  
-6.~Kivy~  
 
 
 ### Check List
